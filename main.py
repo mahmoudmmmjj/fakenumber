@@ -234,7 +234,7 @@ def getMessage():
 def webhook():
     bot.remove_webhook()
     # استبدل الرابط ده برابط المشروع اللي فيرسل هتديهولك
-    bot.set_webhook(url='https://your-project-name.vercel.app/' + API_TOKEN)
+    bot.set_webhook(url='https://fakenumber-zeta.vercel.app/' + API_TOKEN)
     return "✅ Webhook has been set successfully!", 200
 
 if __name__ == "__main__":
