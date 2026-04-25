@@ -8,6 +8,7 @@ import re
 import io
 from threading import Thread
 from datetime import datetime
+import flask
 
 # --- الإعدادات ---
 API_TOKEN = '7675462685:AAHz8qN4ZGOVbEfsQp5vqYxjPA6SMxmzm7I'
@@ -216,9 +217,25 @@ def ban_user_step(m):
 Thread(target=global_monitor, daemon=True).start()
 
 print("🚀 البوت يعمل الآن بكامل طاقته (270 سطر محدث)...")
-while True:
-    try:
-        bot.infinity_polling(timeout=60, long_polling_timeout=30)
-    except Exception as e:
-        print(f"⚠️ خطأ في الاتصال، إعادة المحاولة... {e}")
-        time.sleep(5)
+from flask import Flask, request
+
+app = Flask(__name__)
+
+# دي النقطة اللي تليجرام هيبعت عليها الرسايل
+@app.route('/' + API_TOKEN, methods=['POST'])
+def getMessage():
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "!", 200
+
+# دي صفحة بتفتحها مرة واحدة في المتصفح عشان تربط البوت بالرابط الجديد
+@app.route("/")
+def webhook():
+    bot.remove_webhook()
+    # استبدل الرابط ده برابط المشروع اللي فيرسل هتديهولك
+    bot.set_webhook(url='https://your-project-name.vercel.app/' + API_TOKEN)
+    return "✅ Webhook has been set successfully!", 200
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
