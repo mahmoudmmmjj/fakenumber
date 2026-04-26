@@ -191,7 +191,7 @@ def webhook():
     bot.remove_webhook()
     # اتأكد إنك كاتب رابط مشروعك صح هنا
     bot.set_webhook(url='https://fakenumber-1rqp.vercel.app/' + API_TOKEN)
-    return "✅ Bot is Awake & Fast! hamody", 200
+    return "✅ Bot is Awake & Fast! goood", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
