@@ -6,7 +6,7 @@ import re
 import os
 import pyrebase
 import io
-from flask import Flask, request
+from flask import Flask, request, render_template
 from threading import Thread
 from datetime import datetime
 
@@ -183,7 +183,7 @@ def webhook():
     bot.remove_webhook()
     # استبدل YOUR_URL برابط Vercel الخاص بك
     bot.set_webhook(url='https://fakenumber-1rqp.vercel.app/' + API_TOKEN)
-    return "✅ Connected!", 200
+    return render_template('index.html'), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
