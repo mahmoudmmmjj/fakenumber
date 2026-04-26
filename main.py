@@ -171,19 +171,27 @@ def save_file_with_range(m, srv, cnt, rng):
 
 # --- Vercel Optimized Webhook ---
 app = Flask(__name__)
+
 @app.route('/' + API_TOKEN, methods=['POST'])
 def getMessage():
     if request.headers.get('content-type') == 'application/json':
-        bot.process_new_updates([telebot.types.Update.de_json(request.get_data().decode('utf-8'))])
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        
+        # التعديل المهم هنا: بنشغل المعالجة في Thread منفصل 
+        # عشان نرد على تليجرام فوراً بـ 200 OK وما يحصلش تأخير
+        Thread(target=bot.process_new_updates, args=([update],)).start()
+        
         return "!", 200
     return "Forbidden", 403
 
 @app.route("/")
 def webhook():
+    # الصفحة دي لما بتفتحها بتعمل ريفريش للاتصال يدوياً
     bot.remove_webhook()
-    # استبدل YOUR_URL برابط Vercel بعد الـ Deploy
+    # اتأكد إنك كاتب رابط مشروعك صح هنا
     bot.set_webhook(url='https://fakenumber-1rqp.vercel.app/' + API_TOKEN)
-    return "✅ Bot is Live & Fast!", 200
+    return "✅ Bot is Awake & Fast! hamody", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
