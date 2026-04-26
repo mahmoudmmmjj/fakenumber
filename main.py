@@ -8,34 +8,34 @@ import re
 import io
 from flask import Flask, request
 from threading import Thread
+from datetime import datetime
 
-# --- الإعدادات (كودك الأصلي) ---
+# --- الإعدادات ---
 API_TOKEN = '7675462685:AAHz8qN4ZGOVbEfsQp5vqYxjPA6SMxmzm7I'
 ADMIN_ID = 7895195899 
 OWNER_USER = "hamodyrat"
+
+# ⚠️ مهم جداً: حط رابط مشروعك على فيرسل هنا (عشان يستقبل الرسايل)
+WEBHOOK_URL = "https://fakenumbers-seven.vercel.app/"
+
 bot = telebot.TeleBot(API_TOKEN, threaded=True, num_threads=50)
 
-IVAS_HEADERS = {
-    'User-Agent': "Mozilla/5.0",
-    'Cookie': 'ivas_sms_session=eyJpdiI6IlJDY3pTcWtvR2dOcUJ6Q2ZuUmdTckE9PSIsInZhbHVlIjoiU3duN011eXVJRUM2YkFqZnZNZk9KTTJsam9Uek9Uam5EaVVqdkNyWUtITThhdGZGZmR1T2F1VG5oN3JzUTEzbDBTUUt0QWJ2aERodytIcWxyNEY0N3dhQjdlK3JrMDNSRDhBTEZQNCtUNGM5T0pSdFd2Y3JIRDJZTnNOcmRRNDciLCJtYWMiOiI5NTkxYTM4ODA3ZjE3MGQ5OGU3NDgyYmRkYTBjZWU3NzQ3Njc4N2Q4MTBiODdjMzYwNDA1YzNmMjNmMzU2NzVkIiwidGFnIjoiIn0%3D; XSRF-TOKEN=eyJpdiI6IlB6UCs1bkZNaG81cGtPT0lRQ29xVmc9PSIsInZhbHVlIjoiWElRTGF1RGxuUWN2cExJWkxPMFRZU3NCNTh5MUl2NjRzYzljeDNOQ3BLRzBWNmlibHpVTVlEM0drNWxBUDcvTHZOQjJ0L0x1QWRuQjF3N2pndEdZdkQ2THRMaWM4TkdvWFJJRndGTnh3ZUlPTGRSM2NyQjVxSGRaWmZ3aUF1cEYiLCJtYWMiOiI4YjhiZDk0NzRjOTFlMTc3MDdmODg0YjFlODk2NGY0NDQ1NWM0MTY0NTI4YWViZWMwYWMxYTY3ZThmYTg5ZDA0IiwidGFnIjoiIn0%3D'
-}
-
-# --- إدارة البيانات (Firebase بديل للملفات عشان Vercel) ---
+# --- إعدادات قاعدة البيانات السحابية (Firebase بديل JSON لـ Vercel) ---
 FIREBASE_URL = "https://hamody-68a5e-default-rtdb.firebaseio.com"
 
-def load_data_remote(path):
+def load_data(path):
     try:
         res = requests.get(f"{FIREBASE_URL}/{path}.json")
         return res.json() if res.json() else {}
     except: return {}
 
-def save_data_remote(path, data):
+def save_data(path, data):
     try: requests.put(f"{FIREBASE_URL}/{path}.json", json=data)
     except: pass
 
 def is_banned(uid):
-    s = load_data_remote("settings")
-    if not s: s = {"banned": []}
+    s = load_data("settings")
+    if not s: return False
     return str(uid) in s.get('banned', [])
 
 def cancel_markup():
@@ -43,37 +43,59 @@ def cancel_markup():
     markup.add("إلغاء العملية ❌")
     return markup
 
-# --- فحص الكود (التعديل المطلوب لسحب الرسايل) ---
-def check_ivas_loop(phone_number, chat_id, srv, cnt):
-    url = "https://www.ivasms.com/portal/live/my_sms"
-    for _ in range(45): 
-        try:
-            res = requests.get(url, headers=IVAS_HEADERS, timeout=10)
-            if phone_number in res.text:
-                # سحب الكود من بعد الرقم بـ 200 حرف
-                match = re.search(r'(\d{5,6})', res.text.split(phone_number)[1][:200])
-                if match:
-                    code = match.group(1)
-                    bot.send_message(chat_id, f"✅ **تم استلام الكود!**\n\nالخدمة: `{srv}`\nالرقم: `{phone_number}`\nالكود: `{code}`", parse_mode="Markdown")
-                    return
-        except: pass
-        time.sleep(5)
-    bot.send_message(chat_id, f"❌ انتهى وقت الانتظار للرقم `{phone_number}`")
+# --- إعدادات IVASMS (من ملفك اللي باعته بالظبط) ---
+IVAS_TOKEN = "mdWCez8pRLYEzgI4LPDcbCrMwJR96czg8PFWD7Sp"
+IVAS_HEADERS = {
+    'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+    'Accept': "text/html, */*; q=0.01",
+    'x-requested-with': "XMLHttpRequest",
+    'origin': "https://www.ivasms.com",
+    'referer': "https://www.ivasms.com/portal/sms/received",
+    'Cookie': "_fbp=fb.1.1776003227915.194465397404537711; cf_clearance=DYPKOA2ue315tKTGTtM_BydeHjQJKPmvaw9phITsOoI-1776629195-1.2.1.1-VmoaO1R37S_mE2vCKqwqcWvXbxDvAN8_a6ipyAB.0FJ90rzOna2WN.wF3_CWijy1sqUDGMYuoH_cUbcMEYX8WrNpF_bC2cM_g3xRSI1hg1FPMDBKcQtz45ozvFEHVQX766JkWTOYWApCobrqP4SjIdOJ5PZdZ8p423Pgxhoa9ErTdmrJOnuAco7a7WdrhD4zzX78qI9fsHhEjJ7_uyK2LxYE5xdJ23d05OAQnuwOYUapTLUE_z3TcCKyw30.hB.S3sX5HsjX3d1z3WVW28tkX2IZ4NhSsUNGwNrN_nM8GDX5sySrKHEmv_wtwH3hahjYjxgXRZ2YZOtiFY2K5RQqPg; XSRF-TOKEN=eyJpdiI6Imdob2dKMm84ZG1zS0ZMMTYwbEhRdmc9PSIsInZhbHVlIjoidzg4cmovU1F1RngzM3lCcmtaTVZ6S2RadHpTWTBrUjZEN3I5NElBVDRmSVVhMUJsZUJRSUZpeStSc2hGWWo4dGFaeFE0U0VyZWl0bUpqaE1HSjg0SmJ3WUtkclFEeXNyOHpxUmlMN21aZzhpVDdqQ3VTenJZWDFINzFLeGhjMHUiLCJtYWMiOiJhN2NlYzMxYWU0OTM5YWY2OTEzODc0YzA4ZDhlZTg2ZjMyNTU1ZjZhOGU3ZmEzYWQ3MmYyOTgyMDgzMGE4MDc5IiwidGFnIjoiIn0%3D; ivas_sms_session=eyJpdiI6ImZZZkN5dkhjUzRTdnR6WWp1dEQ0Y1E9PSIsInZhbHVlIjoiOFI0aHhycWI2ajNHUnArWGF0N1g5bUZVbzZ2MFdwUzE2YllmZmp4RDREb21adVJOYmZOdkN0dE9PVkwzVkZGSUNoMWRsK0F3SEJEVjYxZ3FFRzFGdWJBQ1ZHakM1QzNlY2xZWlhLSXV3VmJpb1daSTg1RXlUYnVXeDFRcVRYZ0YiLCJtYWMiOiI5MmMzYmYzNzhlZmU1OTRmYWYwMjk3MGJiNWM4NDNjMmQwNjQ5NDEwZjkwYzYwYTk3OGExYTRlMzg2ZTdjOTM3IiwidGFnIjoiIn0%3D"
+}
+
+# --- دالة سحب الرسايل المحدثة من اتصالك ---
+def fetch_sms(number, range_name):
+    url = "https://www.ivasms.com/portal/sms/received/getsms/number/sms"
+    today = datetime.now().strftime("%Y-%m-%d")
+    payload = {
+        '_token': IVAS_TOKEN,
+        'start': today,
+        'end': today,
+        'Number': number,
+        'Range': range_name
+    }
+    try:
+        res = requests.post(url, data=payload, headers=IVAS_HEADERS, timeout=12)
+        match = re.search(r'(\d{5,6})', res.text) # البحث عن كود 5 أو 6 أرقام
+        if match: return match.group(1)
+    except Exception as e: pass
+    return None
+
+def check_ivas_loop(phone_number, chat_id, srv, rng):
+    for _ in range(30):
+        code = fetch_sms(phone_number, rng)
+        if code:
+            bot.send_message(chat_id, f"✅ **تم استلام الكود!**\n\nالخدمة: `{srv}`\nالرقم: `{phone_number}`\nالكود: `{code}`", parse_mode="Markdown")
+            return
+        time.sleep(10)
+    bot.send_message(chat_id, f"❌ انتهى وقت الانتظار للرقم `{phone_number}`.")
 
 # --- أوامر المستخدم ---
 @bot.message_handler(commands=['start'])
 def start_msg(message):
     if is_banned(message.from_user.id): return
     uid = str(message.from_user.id)
-    u = load_data_remote("users")
+    u = load_data("users")
     if uid not in u:
         u[uid] = {"balance": 0.0}
-        save_data_remote("users", u)
+        save_data("users", u)
     
-    s = load_data_remote("settings")
+    s = load_data("settings")
     if not s: s = {"profit_on": False, "group_link": "https://t.me/hamodyrat"}
     
     bal_txt = f"💰 **رصيدك:** `{u[uid]['balance']}$`" if s.get('profit_on') else ""
+    
     txt = (f"🔥 **أهلاً بك في بوت الأرقام!** 🔥\n━━━━━━━━━━━━━━\n"
            f"🚀 **خدمة تفعيل الأرقام العالمية**\n\n{bal_txt}\n"
            f"📈 **حالة السيرفر:** `يعمل ✅`\n━━━━━━━━━━━━━━\n👇 **اختر الخدمة:**")
@@ -84,15 +106,15 @@ def start_msg(message):
                types.InlineKeyboardButton("📢 قناة الأكواد", url=s.get('group_link')))
     bot.send_message(message.chat.id, txt, reply_markup=markup, parse_mode="Markdown")
 
-# --- لوحة التحكم للإدارة (كاملة كما طلبت) ---
+# --- لوحة التحكم للإدارة ---
 @bot.message_handler(commands=['hamo'])
 def admin_panel(message):
     if message.from_user.id != ADMIN_ID: return
-    s = load_data_remote("settings")
+    s = load_data("settings")
     p_stat = "✅" if s.get('profit_on') else "❌"
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("➕ إضافة أرقام", callback_data="adm_add"),
+        types.InlineKeyboardButton("➕ إضافة أرقام ورينج", callback_data="adm_add"),
         types.InlineKeyboardButton("🗑️ حذف", callback_data="adm_del_main"),
         types.InlineKeyboardButton(f"الربح: {p_stat}", callback_data="adm_tog_p"),
         types.InlineKeyboardButton("📢 إذاعة", callback_data="adm_bc"),
@@ -109,11 +131,11 @@ def cancel_all(m):
     bot.send_message(m.chat.id, "✅ تم إلغاء العملية.", reply_markup=types.ReplyKeyboardRemove())
     admin_panel(m)
 
-# --- Callbacks (بدون حذف) ---
+# --- Callbacks ---
 @bot.callback_query_handler(func=lambda call: True)
 def callbacks(call):
-    n = load_data_remote("nums")
-    s = load_data_remote("settings")
+    n = load_data("nums")
+    s = load_data("settings")
 
     if call.data == "u_get":
         if not n: return bot.answer_callback_query(call.id, "لا توجد أرقام!")
@@ -130,20 +152,24 @@ def callbacks(call):
 
     elif call.data.startswith("getnum_") or call.data.startswith("chg_"):
         _, srv, cnt = call.data.split("_")
-        if n.get(srv, {}).get(cnt):
-            num = n[srv][cnt].pop(0)
-            save_data_remote("nums", n)
+        details = n.get(srv, {}).get(cnt, {})
+        if details and details.get('list'):
+            num = details['list'].pop(0)
+            rng = details['range'] # سحب الرينج عشان الـ API
+            save_data("nums", n)
             txt = f"◈ **الرقم:** `{num}`\n◈ **الدولة:** `{cnt}`\n◈ **الحالة:** ⏳ جاري الانتظار..."
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("قناة الأكواد 📩", url=s.get('group_link')))
             markup.add(types.InlineKeyboardButton("🔄 تغيير الرقم", callback_data=f"chg_{srv}_{cnt}"),
                        types.InlineKeyboardButton("⬅️ رجوع", callback_data="u_get"))
             bot.edit_message_text(txt, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-            Thread(target=check_ivas_loop, args=(num, call.message.chat.id, srv, cnt)).start()
+            
+            # تشغيل المراقبة في Thread عشان Vercel ما يوقفش
+            Thread(target=check_ivas_loop, args=(num, call.message.chat.id, srv, rng)).start()
         else: bot.answer_callback_query(call.id, "الأرقام خلصت!")
 
     elif call.data == "adm_add":
-        m = bot.send_message(call.message.chat.id, "📌 اكتب اسم الخدمة:", reply_markup=cancel_markup())
+        m = bot.send_message(call.message.chat.id, "📌 اكتب اسم الخدمة (مثل: واتساب):", reply_markup=cancel_markup())
         bot.register_next_step_handler(m, get_srv_name)
 
     elif call.data == "adm_del_main":
@@ -171,7 +197,7 @@ def callbacks(call):
 
     elif call.data.startswith("final_dsrv_"):
         srv = call.data.split("_")[2]
-        if srv in n: del n[srv]; save_data_remote("nums", n)
+        if srv in n: del n[srv]; save_data("nums", n)
         bot.answer_callback_query(call.id, f"تم حذف {srv}")
         admin_panel(call.message)
 
@@ -180,14 +206,14 @@ def callbacks(call):
         srv, cnt = p[2], p[3]
         if srv in n and cnt in n[srv]: 
             del n[srv][cnt]
-            if not n[srv]: del n[srv]
-            save_data_remote("nums", n)
+            if not n[srv]: del n[srv] 
+            save_data("nums", n)
         bot.answer_callback_query(call.id, f"تم حذف {cnt}")
         admin_panel(call.message)
 
     elif call.data == "adm_tog_p":
         s['profit_on'] = not s.get('profit_on', False)
-        save_data_remote("settings", s); admin_panel(call.message)
+        save_data("settings", s); admin_panel(call.message)
 
     elif call.data == "adm_bc":
         m = bot.send_message(call.message.chat.id, "📣 ارسل الرسالة الآن:", reply_markup=cancel_markup())
@@ -202,18 +228,18 @@ def callbacks(call):
         bot.register_next_step_handler(m, set_link_step)
 
     elif call.data == "adm_stats":
-        u = load_data_remote("users")
+        u = load_data("users")
         txt = f"📊 **إحصائيات البوت:**\n\n👥 عدد المستخدمين: `{len(u)}`"
         for k, v in n.items():
-            total = sum(len(x) for x in v.values())
+            total = sum(len(x.get('list', [])) for x in v.values())
             txt += f"\n📱 {k}: `{total} رقم`"
         bot.send_message(call.message.chat.id, txt, parse_mode="Markdown")
 
     elif call.data == "adm_exp":
-        u = load_data_remote("users"); ids = "\n".join(u.keys())
+        u = load_data("users"); ids = "\n".join(u.keys())
         bot.send_document(call.message.chat.id, io.BytesIO(ids.encode()), caption=f"👥 IDs list ({len(u)})")
 
-# --- Steps (كاملة) ---
+# --- Steps ---
 def get_srv_name(m):
     if m.text == "إلغاء العملية ❌": return
     srv = m.text
@@ -223,48 +249,58 @@ def get_srv_name(m):
 def get_cnt_name(m, srv):
     if m.text == "إلغاء العملية ❌": return
     cnt = m.text
-    m3 = bot.send_message(m.chat.id, f"📄 ارفع ملف .txt لـ {srv}/{cnt}:", reply_markup=cancel_markup())
-    bot.register_next_step_handler(m3, lambda msg: save_file(msg, srv, cnt))
+    m3 = bot.send_message(m.chat.id, f"🔢 اكتب اسم الـ Range (مثال: EGYPT 5130):", reply_markup=cancel_markup())
+    bot.register_next_step_handler(m3, lambda msg: get_rng_name(msg, srv, cnt))
 
-def save_file(m, srv, cnt):
+def get_rng_name(m, srv, cnt):
     if m.text == "إلغاء العملية ❌": return
-    if not m.document: return
+    rng = m.text
+    m4 = bot.send_message(m.chat.id, f"📄 ارفع ملف .txt لـ {srv}/{cnt}:", reply_markup=cancel_markup())
+    bot.register_next_step_handler(m4, lambda msg: save_file_logic(msg, srv, cnt, rng))
+
+def save_file_logic(m, srv, cnt, rng):
+    if m.text == "إلغاء العملية ❌": return
+    if not m.document: return bot.send_message(m.chat.id, "خطأ: ارفع ملف txt!")
     info = bot.get_file(m.document.file_id)
     raw = bot.download_file(info.file_path).decode('utf-8').splitlines()
-    n = load_data_remote("nums")
+    n = load_data("nums")
     if srv not in n: n[srv] = {}
-    n[srv][cnt] = n[srv].get(cnt, []) + [x.strip() for x in raw if x.strip()]
-    save_data_remote("nums", n)
+    if cnt not in n[srv]: n[srv][cnt] = {"range": rng, "list": []}
+    
+    n[srv][cnt]['list'].extend([x.strip() for x in raw if x.strip()])
+    n[srv][cnt]['range'] = rng 
+    save_data("nums", n)
     bot.send_message(m.chat.id, "✅ تم الإضافة.", reply_markup=types.ReplyKeyboardRemove())
     admin_panel(m)
 
 def ban_user_step(m):
     if m.text == "إلغاء العملية ❌": return
-    s = load_data_remote("settings")
+    s = load_data("settings")
     if 'banned' not in s: s['banned'] = []
     s['banned'].append(str(m.text))
-    save_data_remote("settings", s)
+    save_data("settings", s)
     bot.send_message(m.chat.id, "✅ تم الحظر.", reply_markup=types.ReplyKeyboardRemove())
     admin_panel(m)
 
 def set_link_step(m):
     if m.text == "إلغاء العملية ❌": return
-    s = load_data_remote("settings"); s['group_link'] = m.text
-    save_data_remote("settings", s)
+    s = load_data("settings"); s['group_link'] = m.text
+    save_data("settings", s)
     bot.send_message(m.chat.id, "✅ تم تحديث الرابط.", reply_markup=types.ReplyKeyboardRemove())
     admin_panel(m)
 
 def broadcast_step(m):
     if m.text == "إلغاء العملية ❌": return
-    u = load_data_remote("users")
+    u = load_data("users")
     for uid in u.keys():
         try: bot.copy_message(uid, m.chat.id, m.message_id)
         except: pass
     bot.send_message(m.chat.id, "✅ تم.", reply_markup=types.ReplyKeyboardRemove())
     admin_panel(m)
 
-# --- Vercel Webhook Configuration ---
+# --- Vercel Webhook + Flask ---
 app = Flask(__name__)
+
 @app.route('/' + API_TOKEN, methods=['POST'])
 def getMessage():
     json_string = request.get_data().decode('utf-8')
@@ -273,7 +309,10 @@ def getMessage():
     return "!", 200
 
 @app.route("/")
-def index(): return "Bot Active!", 200
+def index():
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL + '/' + API_TOKEN)
+    return "Bot is Connected & Ready! ✅", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
